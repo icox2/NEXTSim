@@ -54,11 +54,18 @@ class nDetConstruction : public G4VUserDetectorConstruction{
 	  */
 	G4VPhysicalVolume* ConstructDetector();
 
+	/** Build the world volume and place all implants defined in the detector list
+	  * @return A pointer to the world physical volume
+	  */
+	G4VPhysicalVolume* ConstructImplant();
+
 	/** Add a detector geometry to the list of detectors
 	  * @note See nDetDetector::setGeometry() for accepted geometry names
 	  * @return True if the specified type is recognized and return false otherwise
 	  */
 	bool AddGeometry(const G4String &geom);
+
+	bool AddImplantGeometry(const G4String &geom);
 
 	/** Setup segmented PMTs
 	  */
@@ -92,6 +99,10 @@ class nDetConstruction : public G4VUserDetectorConstruction{
 	  */
 	centerOfMass *GetCenterOfMassR(){ return &center[1]; }
 
+	/** Return a pointer to the optical photon center-of-mass calculator for the left PMT
+	  */
+	centerOfMass *GetCenterOfMass(){ return &center[0]; } //This is for the implant detector
+
 	/** Return a pointer to the PMT response for the left PMT
 	  */
 	pmtResponse *GetPmtResponseL(){ return center[0].getPmtResponse(); }
@@ -100,9 +111,17 @@ class nDetConstruction : public G4VUserDetectorConstruction{
 	  */
 	pmtResponse *GetPmtResponseR(){ return center[1].getPmtResponse(); }
 
+	/** Return a pointer to the PMT response for the left PMT
+	  */
+	//pmtResponse *GetPmtResponse(){ return center[0].getPmtResponse(); } //This is for the implant detector
+
 	/** Get a copy of the current vector of detectors
 	  */
 	std::vector<nDetDetector*> GetUserDetectors() const { return userDetectors; }
+
+	/** Get a copy of the current vector of implants
+	  */
+	std::vector<nDetImplant*> GetUserImplants() const { return userImplants; }
 
 	/** Get the current user defined detector parameters
 	  */
@@ -112,9 +131,17 @@ class nDetConstruction : public G4VUserDetectorConstruction{
 	  */
 	nDetDetector *getCurrentDetector(){ return currentDetector; }
 
+	/** Get a pointer to the current detector
+	  */
+	nDetImplant *getCurrentImplant(){ return currentImplant; }
+
 	/** Clear all volumes, surfaces, and detectors
 	  */
 	void ClearGeometry();
+
+	/** Clear all volumes, surfaces, and detectors
+	  */
+	void ClearImplantGeometry();
 
 	/** Place all detectors into the world and copy the list of detectors to all user run actions
 	  */	
@@ -164,6 +191,10 @@ class nDetConstruction : public G4VUserDetectorConstruction{
 	/** Get clones of all currently defined detectors
 	  */
 	void GetCopiesOfDetectors(std::vector<nDetDetector> &detectors) const ;
+
+	/** Get clones of all currently defined detectors
+	  */
+	void GetCopiesOfImplants(std::vector<nDetImplant> &implants) const ;
 	
 	/** Set the experimental setup name for construction
 	 */
@@ -177,8 +208,10 @@ class nDetConstruction : public G4VUserDetectorConstruction{
 	G4bool fCheckOverlaps; ///< Flag indicating that Geant should check for overlaps between all placed objects
 
 	std::vector<nDetDetector*> userDetectors; ///< Vector of all detectors added by the user
+	std::vector<nDetImplant*> userImplants; ///< Vector of all implants added by the user
 	
 	nDetDetector *currentDetector; ///< Pointer to the current detector added by the user
+	nDetImplant *currentImplant; ///< Pointer to the current Implant added by the user
 
 	centerOfMass center[2]; ///< Objects used to compute the detected optical photon center-of-mass position for the left and right PMT
 

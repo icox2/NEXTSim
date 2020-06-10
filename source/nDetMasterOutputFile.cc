@@ -41,6 +41,7 @@ nDetMasterOutputFile::nDetMasterOutputFile(){
 	runIndex = 1;
 	fFile = NULL;
 	fTree = NULL;
+	fImpTree = NULL;
 
 	runTitle = "NEXT Geant4 output";
 	runIndex = 1;
@@ -59,6 +60,7 @@ nDetMasterOutputFile::nDetMasterOutputFile(){
 	
 	evtData = new nDetEventStructure();
 	outData = new nDetOutputStructure();
+	outImplantData = new nDetImplantOutputStructure();
 	multData = new nDetMultiOutputStructure();
 	debugData = new nDetDebugStructure();
 	traceData = new nDetTraceStructure();
@@ -70,6 +72,7 @@ nDetMasterOutputFile::~nDetMasterOutputFile(){
 	
 	delete evtData;
 	delete outData;
+	delete outImplantData;
 	delete multData;
 	delete debugData;
 	delete traceData;
@@ -158,10 +161,12 @@ bool nDetMasterOutputFile::openRootFile(const G4Run* aRun){
 	// Create root tree.
 	if(treename.empty()) treename = "data"; //"neutronEvent";
 	fTree = new TTree(treename.c_str(), "Primary particle scattering data");
+	fImpTree = new TTree("impData", "Data from the implant detector");
 
 	// Add the branches
 	fTree->Branch("event", evtData);
 	if(singleDetectorMode){ // Add the single-detector branches
+		fTree->Branch("implant", outImplantData);
 		fTree->Branch("output", outData);
 		if(outputDebug) // Add the debug branch
 			fTree->Branch("debug", debugData);
@@ -184,6 +189,7 @@ bool nDetMasterOutputFile::closeRootFile(){
 	if(fFile){
 		fFile->cd();
 		fTree->Write();
+		fImpTree->Write();
 		fFile->Close();
 		delete fFile;
 		fFile = NULL;
@@ -202,10 +208,12 @@ bool nDetMasterOutputFile::fillBranch(const nDetDataPack &pack){
 	fileLock.lock();
 
 	// Copy the data
-	pack.copyData(evtData, outData, multData, debugData, traceData);
+	pack.copyData(evtData, outData, outImplantData, multData, debugData, traceData);
 
-	if(outputBadEvents || pack.goodEvent())
+	if(outputBadEvents || pack.goodEvent()){
 		fTree->Fill(); // Fill the tree
+		fImpTree->Fill();
+	}	
 
 	double avgTimePerEvent;
 	double avgTimePerPhoton;

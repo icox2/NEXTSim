@@ -38,11 +38,12 @@ nDetParticleSource &nDetParticleSource::getInstance(){
 	return instance;
 }
 
-nDetParticleSource::nDetParticleSource(nDetDetector *det/*=NULL*/) : G4GeneralParticleSource(), fSourceMessenger(NULL), unitX(1,0,0), unitY(0,1,0), unitZ(0,0,1),
+nDetParticleSource::nDetParticleSource(nDetDetector *det/*=NULL*/, nDetImplant *imp/*=NULL*/) : G4GeneralParticleSource(), fSourceMessenger(NULL), unitX(1,0,0), unitY(0,1,0), unitZ(0,0,1),
                                                                      sourceOrigin(0,0,0), beamspotType(0), beamspot(0), beamspot0(0), rot(), targThickness(0),targEnergyLoss(0),
                                                                      targTimeSlope(0), targTimeOffset(0), beamE0(0), useReaction(false), isotropic(false), back2back(false), realIsotropic(false),
                                                                      particleRxn(NULL), detPos(), detSize(), detRot(), sourceIndex(0), numSources(0), interpolationMethod("Lin")
 {
+	std::cout<<"In Particle Source"<<std::endl;
 	// Set the default particle source.
 	SetNeutronBeam(1.0); // Set a 1 MeV neutron beam by default
 	
@@ -51,9 +52,14 @@ nDetParticleSource::nDetParticleSource(nDetDetector *det/*=NULL*/) : G4GeneralPa
 	
 	// Set the default particle reaction.
 	particleRxn = new Reaction();
-
-	if(det)
+	if(det){
 		this->SetDetector(det);
+		std::cout<<"In Detector Source"<<std::endl;
+	}
+	else if(imp){
+		this->SetImplant(imp);
+		std::cout<<"In Implant Source"<<std::endl;
+	}
 	
 	// Create a messenger for this class
 	fSourceMessenger = new nDetParticleSourceMessenger(this); 
@@ -210,6 +216,12 @@ void nDetParticleSource::SetDetector(const nDetDetector *det){
 	detPos = det->GetDetectorPos();
 	detSize = det->GetDetectorSize();
 	detRot = det->GetDetectorRot();
+}
+
+void nDetParticleSource::SetImplant(const nDetImplant *imp){
+	detPos = imp->GetDetectorPos();
+	detSize = imp->GetDetectorSize();
+	detRot = imp->GetDetectorRot();
 }
 
 void nDetParticleSource::Set252Cf(const size_t &size_/*=150*/, const double &stepSize_/*=0.1*/){

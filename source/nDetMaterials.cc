@@ -26,6 +26,7 @@ nDetMaterials::~nDetMaterials(){
 		
 		// Materials
 		delete fGrease;
+ 		delete fYSO;
 		
 		// Material properties tables
 		delete fPerfectMPT;
@@ -62,6 +63,7 @@ void nDetMaterials::initialize(){
 	elementList["F"] = fF;
 	elementList["Si"] = fSi;
 	elementList["Al"] = fAl;
+ 	elementList["Y"] = fY;
 	
 	materialList["air"] = fAir;
 	materialList["vacuum"] = fVacuum;
@@ -69,6 +71,7 @@ void nDetMaterials::initialize(){
     materialList["ej200"] = fEJ200;
     materialList["ej276"] = fEJ276; 
 	materialList["grease"] = fGrease;
+ 	materialList["yso"] = fYSO;
 	materialList["quartz"] = fSiO2;
 	materialList["silicon"] = fSilicon;
 	materialList["mylar"] = fMylar;
@@ -353,12 +356,21 @@ void nDetMaterials::defineMaterials(){
 	fF = nist.searchForElement("F");
 	fSi = nist.searchForElement("Si");
 	fAl = nist.searchForElement("Al");
+ 	fY = nist.searchForElement("Y");
 
 	// Air
     fAir = nist.searchForMaterial("G4_AIR");
 
 	// Lab vacuum
 	fVacuum = nist.searchForMaterial("G4_Galactic");
+     // YSO
+
+ 	fYSO =new G4Material("YSO",2.7*g/cm3, 3); 
+ 	fYSO->AddElement(fY,2);
+ 	fYSO->AddElement(fO,5);
+ 	fYSO->AddElement(fSi,1);
+
+ 	materialList["yso"] = fYSO;
 
 	/////////////////////////////////////////////////////////////////
 	// Teflon (C2F4)n

@@ -9,6 +9,7 @@
 #include "nDetWorldObject.hh"
 
 class nDetDetector;
+class nDetImplant;
 
 /** @class greaseLayer
   * @brief Optical grease component layer which is added to a detector assembly
@@ -41,6 +42,8 @@ class greaseLayer : public nDetWorldObject {
 	  * @param obj A pointer to the detector where the grease layer will be placed
 	  */
 	virtual void construct(nDetDetector *obj);
+
+	virtual void construct(nDetImplant *obj);
 
 	/** Return a string containing proper input string syntax
 	  */
@@ -88,6 +91,8 @@ class diffuserLayer : public nDetWorldObject {
 	  * @param obj A pointer to the detector where the diffuser will be placed
 	  */
 	virtual void construct(nDetDetector *obj);
+
+	virtual void construct(nDetImplant *obj);
 
 	/** Return a string containing proper input string syntax
 	  */
@@ -137,6 +142,8 @@ class lightGuideLayer : public nDetWorldObject {
 	  * @param obj A pointer to the detector where the light-guide will be placed
 	  */
 	virtual void construct(nDetDetector *obj);
+
+	virtual void construct(nDetImplant *obj);
 
 	/** Return a string containing proper input string syntax
 	  */
@@ -190,6 +197,8 @@ class gdmlLightGuideLayer : public nDetWorldObject {
 	  * @param obj A pointer to the detector where the light-guide model will be placed
 	  */
 	virtual void construct(nDetDetector *obj);
+
+	virtual void construct(nDetImplant *obj);
 
 	/** Return a string containing proper input string syntax
 	  */

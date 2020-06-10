@@ -576,3 +576,421 @@ void nDetDetector::loadLightGuide(gdmlSolid *solid, const G4ThreeVector &rotatio
 	offsetZ += solid->getLength();
 	fTrapezoidLength = solid->getLength()*mm;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// class nDetImplant
+///////////////////////////////////////////////////////////////////////////////
+
+nDetImplant::nDetImplant(nDetConstruction *detector, nDetMaterials *matptr) : nDetDetectorParams(detector->GetDetectorParameters()),
+                                                                                assembly_logV(NULL), assembly_physV(NULL),
+                                                                                layerSizeX(0), layerSizeY(0), offsetZ(0),
+	                                                                            parentCopyNum(0), firstSegmentCopyNum(0), lastSegmentCopyNum(0), 
+	                                                                            checkOverlaps(false)
+{
+	copyCenterOfMass(*detector->GetCenterOfMass()); //This has been adjusted
+	materials = matptr;
+}
+
+nDetImplant::~nDetImplant(){
+	/*for(std::vector<nDetWorldObject*>::iterator iter = userLayers.begin(); iter != userLayers.end(); iter++){
+		delete (*iter); // This causes a seg-fault
+	}
+	userLayers.clear();*/
+}
+
+nDetImplant nDetImplant::clone() const {
+	// Clone this detector's parameters
+	nDetImplant retval(*this);
+	
+	// Copy the center of mass calculators explicitly
+	retval.cmI = cmI.clone();
+
+	return retval;
+}
+
+void nDetImplant::getCurrentOffset(G4double &x_, G4double &y_, G4double &z_){
+	x_ = layerSizeX;
+	y_ = layerSizeY;
+	z_ = offsetZ;
+}
+
+void nDetImplant::setPositionAndRotation(const G4ThreeVector &pos, const G4RotationMatrix &rot){
+	detectorPosition = pos;
+	detectorRotation = rot;
+}
+
+void nDetImplant::setCurrentOffset(const G4double &x_, const G4double &y_, const G4double &z_){
+	layerSizeX = x_;
+	layerSizeY = y_;
+	offsetZ = z_;
+}
+
+void nDetImplant::buildAllLayers(){
+	for(std::vector<nDetWorldObject*>::iterator iter = userLayers.begin(); iter != userLayers.end(); iter++){
+		(*iter)->construct(this);
+	}	
+}
+
+void nDetImplant::placeImplant(G4LogicalVolume *parent){
+	assembly_physV = new G4PVPlacement(&detectorRotation, detectorPosition, assembly_logV, "Assembly", parent, 0, 0, false);
+	assembly_physV->SetCopyNo(parentCopyNum);
+	
+	// Do some post-placement processing
+	afterPlacement();
+}
+
+void nDetImplant::clear(){
+	cmI.clear();
+}
+
+void nDetImplant::copyCenterOfMass(const centerOfMass &implant){
+	cmI = implant.clone();
+}
+
+bool nDetImplant::checkPmtCopyNumber(const G4int &num, bool &isImp) const { 
+	isImp = 1;
+	return (num == 2*parentCopyNum);
+}
+
+bool nDetImplant::getSegmentFromCopyNum(const G4int &copyNum, G4int &col, G4int &row) const {
+	if(!this->checkCopyNumber(copyNum)) return false;
+	col = (copyNum-firstSegmentCopyNum) / fNumRows;
+	row = (copyNum-firstSegmentCopyNum) % fNumRows;
+	return true;
+}
+
+void nDetImplant::addLightGuideGDML(const G4String &input){
+	addLayer(new gdmlLightGuideLayer(input));
+}
+
+void nDetImplant::addGreaseLayer(const G4String &input){
+	addLayer(new greaseLayer(input));
+}
+
+void nDetImplant::addDiffuserLayer(const G4String &input){
+	addLayer(new diffuserLayer(input));
+}
+
+void nDetImplant::addLightGuideLayer(const G4String &input){
+	addLayer(new lightGuideLayer(input));
+}
+
+void nDetImplant::construct(){
+	// Update the size of the assembly in the event it has changed
+	UpdateSize(); 
+
+	// Prepare to build the detector and compute the maximum size of the detector volume
+	prepareToBuild();
+
+	// Build the assembly volume
+	constructAssembly();
+
+	// Get materials and visual attributes
+	scintMaterial = materials->getUserDetectorMaterial(detectorMaterialName);
+	scintVisAtt = materials->getUserVisAttributes(detectorMaterialName);
+	wrappingMaterial = materials->getUserSurfaceMaterial(wrappingMaterialName);
+	wrappingVisAtt = materials->getUserVisAttributes(wrappingMaterialName);
+	wrappingOpSurf = materials->getUserOpticalSurface(wrappingMaterialName);
+
+	// Build the geometry
+	buildDetector();
+
+	// Generate all user-defined layers.
+	buildAllLayers();
+
+	// Attach PMT 
+	constructPSPmt();
+}
+
+G4LogicalVolume *nDetImplant::constructAssembly(){
+	// Calculate the dimensions of the detector
+	G4double assemblyWidth = maxBodySize.getX() + 2*fWrappingThickness;
+	G4double assemblyHeight = maxBodySize.getY() + 2*fWrappingThickness;
+	G4double assemblyLength = maxBodySize.getZ();
+
+	// Account for the size of the PSPMT
+	assemblyWidth = std::max(assemblyWidth, pmtWidth);
+	assemblyHeight = std::max(assemblyHeight, pmtHeight);
+	assemblyLength += 2*(fGreaseThickness+fWindowThickness+fSensitiveThickness);
+
+	// Account for the additional component layers
+	for(std::vector<nDetWorldObject*>::iterator iter = userLayers.begin(); iter != userLayers.end(); iter++){
+		if(!(*iter)->decodeString()){
+			std::cout << " nDetImplant: Invalid number of arguments given to ::decodeString(). Expected " << (*iter)->getNumRequiredArgs() << " but received " << (*iter)->getNumSuppliedArgs() << ".\n";
+			std::cout << " nDetImplant:  SYNTAX: " << (*iter)->syntaxStr() << std::endl;
+			continue;
+		}
+		assemblyWidth = std::max(assemblyWidth, (*iter)->getSizeX());
+		assemblyHeight = std::max(assemblyHeight, (*iter)->getSizeY());
+		assemblyLength += 2*(*iter)->getSizeZ();
+	}
+
+	// Build the assembly box
+	G4Box *assembly = new G4Box("assembly", assemblyWidth/2, assemblyHeight/2, assemblyLength/2);
+	assembly_logV = new G4LogicalVolume(assembly, materials->fAir, "assembly_logV");
+	assembly_logV->SetVisAttributes(materials->visAssembly);
+
+	return assembly_logV;
+}
+
+G4PVPlacement *nDetImplant::addToDetectorBody(G4LogicalVolume *volume, const G4String &name/*=""*/, const G4ThreeVector &pos/*=G4ThreeVector(0,0,0)*/, G4RotationMatrix *rot/*=NULL*/){
+	return (new G4PVPlacement(rot, pos, volume, (name.empty() ? volume->GetName() : name), assembly_logV, false, 0, checkOverlaps));
+}
+
+G4PVPlacement *nDetImplant::addSegmentToBody(G4LogicalVolume *volume, const G4String &name/*=""*/, const G4ThreeVector &pos/*=G4ThreeVector(0,0,0)*/, G4RotationMatrix *rot/*=NULL*/){
+	return (new G4PVPlacement(rot, pos, volume, (name.empty() ? volume->GetName() : name), assembly_logV, false, lastSegmentCopyNum++, checkOverlaps));
+}
+
+G4PVPlacement *nDetImplant::addBackComponent(G4LogicalVolume *volume, const G4double &offset, const G4String &name/*=""*/, G4RotationMatrix *rot/*=NULL*/){ 
+	return (new G4PVPlacement(rot, G4ThreeVector(0, 0, offset), volume, (name.empty() ? volume->GetName() : name), assembly_logV, false, 2*parentCopyNum, checkOverlaps));
+}
+
+void nDetImplant::addBackComponent(G4PVPlacement* &phys1, G4LogicalVolume *volume, const G4double &offset, const G4String &name/*=""*/, G4RotationMatrix *rot/*=NULL*/){
+	phys1 = (new G4PVPlacement(rot, G4ThreeVector(0, 0, offset), volume, (name.empty() ? volume->GetName() : name), assembly_logV, false, 2*parentCopyNum, checkOverlaps));
+} 
+
+G4PVPlacement *nDetImplant::addFrontComponent(G4LogicalVolume *volume, const G4double &offset, const G4String &name/*=""*/, G4RotationMatrix *rot/*=NULL*/){ 
+	return (new G4PVPlacement(rot, G4ThreeVector(0, 0, offset), volume, (name.empty() ? volume->GetName() : name), assembly_logV, false, 2*parentCopyNum, checkOverlaps));
+}
+
+void nDetImplant::addFrontComponent(G4PVPlacement* &phys1, G4LogicalVolume *volume, const G4double &offset, const G4String &name/*=""*/, G4RotationMatrix *rot/*=NULL*/){
+	phys1 = (new G4PVPlacement(rot, G4ThreeVector(0, 0, offset), volume, (name.empty() ? volume->GetName() : name), assembly_logV, false, 2*parentCopyNum, checkOverlaps));
+} 
+
+void nDetImplant::prepareToBuild(){ 
+	maxBodySize = G4ThreeVector(fDetectorWidth, fDetectorHeight, fDetectorLength); 
+}
+
+void nDetImplant::constructPSPmt(){
+	// Build the sensitive PMT surface.
+	const G4String name = "psSiPM";
+
+	G4double sensitiveZ = offsetZ + fGreaseThickness + fWindowThickness + fSensitiveThickness/2;
+	G4double wrappingThickness = fGreaseThickness + fWindowThickness;
+
+	// The optical grease layer.
+	G4PVPlacement *grease_physV[2] = {NULL, NULL};
+	if(fGreaseThickness > 0){
+		G4double greaseZ = offsetZ + fGreaseThickness/2;
+	
+		G4CSGSolid *grease_solidV = getVolume("window_solidV", pmtWidth, pmtHeight, fGreaseThickness);
+		G4LogicalVolume *grease_logV = new G4LogicalVolume(grease_solidV, materials->fGrease, "grease_logV");
+		
+		grease_logV->SetVisAttributes(materials->visGrease);
+
+		//addMirroredComponents(grease_physV[0], grease_physV[1], grease_logV, greaseZ, "Grease");
+		G4PVPlacement *greaseLogical = addBackComponent(grease_logV, greaseZ, "Grease"); //This might need to be edited for the distance... not sure how exactly one can automatically fit it to edge of detector.. maybe needs phys volume
+
+		
+		if(!fPolishedInterface){
+			for(std::vector<G4PVPlacement*>::iterator iter = scintBody_physV.begin(); iter != scintBody_physV.end(); iter++){
+				new G4LogicalBorderSurface("GreaseInterface", (*iter), grease_physV[0], materials->fGreaseOpSurf);
+				new G4LogicalBorderSurface("GreaseInterface", (*iter), grease_physV[1], materials->fGreaseOpSurf);
+			}
+		}
+		
+		// Clear all scintillator placements.
+		scintBody_physV.clear();
+	}
+
+	G4PVPlacement *window_physV[2] = {NULL, NULL};
+	if(fWindowThickness > 0){ // The quartz window
+		G4double windowZ = offsetZ + fGreaseThickness + fWindowThickness/2;
+	
+		G4CSGSolid *window_solidV = getVolume("window_solidV", pmtWidth, pmtHeight, fWindowThickness);
+		G4LogicalVolume *window_logV = new G4LogicalVolume(window_solidV, materials->fSiO2, "window_logV");
+		
+		window_logV->SetVisAttributes(materials->visWindow);
+
+		//addMirroredComponents(window_physV[0], window_physV[1], window_logV, windowZ, "Quartz"); //not sure if this is needed
+		G4PVPlacement *window = addBackComponent(window_logV, windowZ, "Quartz");
+	}
+
+	// Build the wrapping.
+	if(WrappingEnabled() && wrappingThickness > 0){
+		G4CSGSolid *boundingBox = getVolume("", pmtWidth, pmtHeight, wrappingThickness);
+		G4CSGSolid *wrappingBox = getVolume("", pmtWidth + 2*fWrappingThickness, pmtHeight + 2*fWrappingThickness, wrappingThickness);
+		
+		G4SubtractionSolid *greaseWrapping = new G4SubtractionSolid("", wrappingBox, boundingBox);
+		G4LogicalVolume *greaseWrapping_logV = new G4LogicalVolume(greaseWrapping, wrappingMaterial, "greaseWrapping_logV");
+		greaseWrapping_logV->SetVisAttributes(wrappingVisAtt);
+		
+		G4double wrappingZ = offsetZ + fGreaseThickness/2 + fWindowThickness/2;
+
+		// Place the wrapping around the scintillator.
+		G4PVPlacement *greaseWrapping_physV[2];
+		
+		if(grease_physV[0] && grease_physV[1]){
+			new G4LogicalBorderSurface("Wrapping", grease_physV[0], greaseWrapping_physV[0], wrappingOpSurf);
+			new G4LogicalBorderSurface("Wrapping", grease_physV[1], greaseWrapping_physV[1], wrappingOpSurf);
+		}
+		if(window_physV[0] && window_physV[1]){
+			new G4LogicalBorderSurface("Wrapping", window_physV[0], greaseWrapping_physV[0], wrappingOpSurf);
+			new G4LogicalBorderSurface("Wrapping", window_physV[1], greaseWrapping_physV[1], wrappingOpSurf);
+		}
+	}
+	
+    // The photon sensitive surface
+    G4CSGSolid *sensitive_solidV = getVolume(name+"_solidV", pmtWidth, pmtHeight, fSensitiveThickness);
+    G4LogicalVolume *sensitive_logV = new G4LogicalVolume(sensitive_solidV, materials->fSilicon, name+"_logV");
+    sensitive_logV->SetVisAttributes(materials->visSensitive);
+    
+    // Logical skin surface.
+    new G4LogicalSkinSurface(name, sensitive_logV, materials->fSiliconOpSurf);    
+
+	//addMirroredComponents(sensitive_logV, sensitiveZ, name);
+	addBackComponent(sensitive_logV, sensitiveZ, name);
+
+    // Move the current offset past the PMT
+	layerSizeX = pmtWidth;
+	layerSizeY = pmtHeight;
+    offsetZ += fGreaseThickness + fWindowThickness + fSensitiveThickness;
+}
+
+G4CSGSolid *nDetImplant::getVolume(const G4String &name, const G4double &width, const G4double &height, const G4double &length){
+	G4CSGSolid *retval;
+	if(fSquarePMTs)
+		retval = new G4Box(name, width/2, height/2, length/2);
+	else
+		retval = new G4Tubs(name, 0, width/2, length/2, 0, 2*CLHEP::pi);
+	return retval;
+}
+
+G4CSGSolid *nDetImplant::getLightGuideVolume(const G4String &name, const G4double &w1, const double &w2, const double &h1, const double &h2, const G4double &length){
+	G4CSGSolid *retval;
+	if(fSquarePMTs)
+		retval = new G4Trd(name, w1/2, w2/2, h1/2, h2/2, length/2);
+	else
+		retval = new G4Cons(name, 0, w1/2, 0, w2/2, length/2, 0, 2*CLHEP::pi);
+	return retval;
+}
+
+void nDetImplant::applyGreaseLayer(){
+	this->applyGreaseLayer(layerSizeX, layerSizeY);
+}
+
+void nDetImplant::applyGreaseLayer(const G4double &x, const G4double &y, double thickness/*=0*/){
+	if(thickness <= 0)
+		thickness = fGreaseThickness;
+	if(thickness > 0){
+		G4CSGSolid *grease_solidV = getVolume("grease", x, y, thickness);
+		G4LogicalVolume *grease_logV = new G4LogicalVolume(grease_solidV, materials->fGrease, "grease_logV");
+		grease_logV->SetVisAttributes(materials->visGrease);
+
+		// Add the optical grease to the assembly
+		//addMirroredComponents(grease_logV, offsetZ+thickness/2, "Grease"); 
+		G4PVPlacement *greaseLogical = addBackComponent(grease_logV, offsetZ+thickness/2, "Grease"); 
+
+		// Offset the other layers to account for the layer of optical grease
+		layerSizeX = x;
+		layerSizeY = y;
+		offsetZ += thickness;
+	}
+}
+
+void nDetImplant::applyDiffuserLayer(){
+	this->applyDiffuserLayer(layerSizeX, layerSizeY, fDiffuserLength);
+}
+
+void nDetImplant::applyDiffuserLayer(const G4double &x, const G4double &y, const double &thickness){
+	if(thickness > 0){ // Build the light diffusers (if needed)
+		G4CSGSolid *lightDiffuser = getVolume("lightDiffuser", x, y, thickness);
+		G4LogicalVolume *lightDiffuserLog = new G4LogicalVolume(lightDiffuser, materials->fSiO2, "lightDiffuser_logV");
+
+		// Add the optical grease to the assembly
+		//addMirroredComponents(lightDiffuserLog, offsetZ+thickness/2, "Diffuser");
+		G4PVPlacement *lightDiffuserLogical = addBackComponent(lightDiffuserLog, offsetZ+thickness/2, "Diffuser"); 
+
+		// Offset the other layers to account for the light-diffuser
+		layerSizeX = x;
+		layerSizeY = y;
+		offsetZ += thickness;
+	}
+}
+
+void nDetImplant::applyLightGuide(){
+	this->applyLightGuide(layerSizeX, pmtWidth, layerSizeY, pmtHeight, fTrapezoidLength);
+}
+
+void nDetImplant::applyLightGuide(const G4double &x2, const G4double &y2){
+	this->applyLightGuide(layerSizeX, x2, layerSizeY, y2, fTrapezoidLength);
+}
+
+void nDetImplant::applyLightGuide(const G4double &x1, const G4double &x2, const G4double &y1, const G4double &y2, const double &thickness){
+    if(thickness > 0){ // Build the light guides (if needed)
+        const G4double trapAngleXZ = std::atan2(2*thickness, x1-x2);
+        const G4double trapAngleYZ = std::atan2(2*thickness, y1-y2);
+        
+        const G4double deltaX = fWrappingThickness/std::sin(trapAngleXZ);
+        const G4double deltaY = fWrappingThickness/std::sin(trapAngleYZ);
+        
+        G4double trapezoidZ = offsetZ + thickness/2;
+        
+        std::string trapName = "Acrylic";
+        
+        // Build the light-guide.
+        G4CSGSolid *lightGuide = getLightGuideVolume("lightGuide", x1, x2, y1, y2, thickness);
+	    G4LogicalVolume *lightGuideLog = new G4LogicalVolume(lightGuide, materials->fSiO2, "lightGuide_logV");	
+
+		G4RotationMatrix *rightRotation = new G4RotationMatrix();
+		rightRotation->rotateX(CLHEP::pi);
+
+		// Place the light guides.
+		G4PVPlacement *trapPhysical = addBackComponent(lightGuideLog, trapezoidZ, trapName);
+
+		// Build the wrapping.
+		if(WrappingEnabled()){
+			G4CSGSolid *wrappingSolid = getLightGuideVolume("wrapping", x1+2*deltaX, x2+2*deltaY, y1+2*deltaX, y2+2*deltaY, thickness);
+			G4SubtractionSolid *wrapping = new G4SubtractionSolid("wrapping", wrappingSolid, lightGuide);
+			G4LogicalVolume *wrapping_logV = new G4LogicalVolume(wrapping, wrappingMaterial, "wrapping_logV");		
+			wrapping_logV->SetVisAttributes(wrappingVisAtt);
+
+			// Place the wrapping around the light guides.
+			G4PVPlacement *trapWrapping = addBackComponent(wrapping_logV, trapezoidZ, trapName);
+		
+			// Reflective wrapping.
+			new G4LogicalBorderSurface("Wrapping", trapPhysical, trapWrapping, wrappingOpSurf);
+		}
+		
+		// Offset the other layers to account for the light-guide
+		layerSizeX = x2;
+		layerSizeY = y2;
+    	offsetZ += thickness;
+	}
+}
+
+void nDetImplant::loadGDML(gdmlSolid *solid){
+	if(!solid || !solid->isLoaded()) 
+		return;
+
+	std::cout << " nDetImplant: Loaded GDML model (name=" << solid->getName() << ") with size x=" << solid->getWidth() << " mm, y=" << solid->getThickness() << " mm, z=" << solid->getLength() << " mm\n";
+	
+	// Place loaded model into the assembly.
+	solid->placeSolid(assembly_logV, checkOverlaps);
+}
+
+void nDetImplant::loadLightGuide(gdmlSolid *solid, const G4ThreeVector &rotation){
+	if(!solid || !solid->isLoaded()) 
+		return;
+
+	// Set internal reflectors
+	solid->setLogicalBorders("InnerWrapping", materials->fEsrOpSurf);
+
+	G4double trapezoidZ = offsetZ + solid->getLength()/2;
+	std::cout << " nDetConstruction: Loaded GDML model (name=" << solid->getName() << ") with size x=" << solid->getWidth() << " mm, y=" << solid->getThickness() << " mm, z=" << solid->getLength() << " mm\n";
+
+	// Place loaded model into the assembly.
+	// Place the light-guide on the positive z side.
+	solid->setPosition(G4ThreeVector(0, 0, trapezoidZ));
+	solid->placeSolid(assembly_logV, checkOverlaps);
+	
+	// And on the negative z side.
+	G4RotationMatrix *trapRot = new G4RotationMatrix();
+	trapRot->rotateX(rotation.getX()-CLHEP::pi);
+	solid->placeSolid(trapRot, G4ThreeVector(0, 0, -trapezoidZ), assembly_logV, checkOverlaps);
+
+	layerSizeX = solid->getWidth();
+	layerSizeY = solid->getThickness();
+	offsetZ += solid->getLength();
+	fTrapezoidLength = solid->getLength()*mm;
+}

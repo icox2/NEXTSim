@@ -116,7 +116,7 @@ nDetRunAction::nDetRunAction(){
 	detector = &nDetConstruction::getInstance(); // The detector builder is a singleton class.
 	
 	// Set data structure addresses.
-	data.setDataAddresses(&evtData, &outData, &multData, &debugData, &traceData);
+	data.setDataAddresses(&evtData, &outData, &outImplantData, &multData, &debugData, &traceData);
 }
 
 nDetRunAction::~nDetRunAction(){
@@ -163,6 +163,23 @@ void nDetRunAction::BeginOfRunAction(const G4Run* aRun)
 		}
 		outputFile->setMultiDetectorMode(true);
 	}
+	else if(userImplants.size() > 1){
+		if(outputFile->getOutputDebug()){
+			Display::WarningPrint("Main debug output is not supported for more than one implant! Using reduced debug readout.", "nDetRunAction");
+			outputFile->setOutputDebug((outputDebug = false));
+			outputMultiDebug = true;
+		}
+		if(outputFile->getOutputTraces()){
+			Display::WarningPrint("Trace output is not supported for more than one implant!", "nDetRunAction");
+			outputFile->setOutputTraces((outputTraces = false));	
+		}
+		for(size_t index = 0; index < container->size(); index++){ // Set options per thread
+			container->getActionManager(index)->getRunAction()->setOutputDebug(false);
+			container->getActionManager(index)->getRunAction()->setOutputTraces(false);
+			container->getActionManager(index)->getRunAction()->setOutputMultiDebug(outputMultiDebug);
+		}
+		outputFile->setMultiDetectorMode(true);
+	}
 	else{ // Single detector mode
 		for(size_t index = 0; index < container->size(); index++){ // Set options per thread
 			container->getActionManager(index)->getRunAction()->setOutputDebug(outputFile->getOutputDebug());
@@ -189,9 +206,11 @@ void nDetRunAction::EndOfRunAction(const G4Run* aRun)
 void nDetRunAction::updateDetector(nDetConstruction *construction){
 	// Clear all currently defined detectors
 	userDetectors.clear();
+	userImplants.clear();
 
 	// Copy the list of detectors
 	construction->GetCopiesOfDetectors(userDetectors);	
+	construction->GetCopiesOfImplants(userImplants);	
 	
 	// Search for a start detector. Currently only one start is supported, break after finding the first one
 	startDetector = NULL;
@@ -200,6 +219,18 @@ void nDetRunAction::updateDetector(nDetConstruction *construction){
 			startDetector = &(*iter);
 			 break;
 		}
+		else
+			endDetector=true;
+	}
+
+	startImplant = NULL;
+	for(std::vector<nDetImplant>::iterator iter = userImplants.begin(); iter != userImplants.end(); iter++){
+		if(iter->GetIsStart()){
+			startImplant = &(*iter);
+			 break;
+		}
+		else
+			endImplant=true;
 	}
 }
 
@@ -208,11 +239,21 @@ G4int nDetRunAction::checkCopyNumber(const G4int &num) const {
 		if(iter->checkCopyNumber(num))
 			return iter->getParentCopyNumber();
 	}
+
+	for(std::vector<nDetImplant>::const_iterator iter = userImplants.begin(); iter != userImplants.end(); iter++){
+		if(iter->checkCopyNumber(num))
+			return iter->getParentCopyNumber();
+	}
 	return -1;
 }
 
 bool nDetRunAction::getSegmentFromCopyNum(const G4int &copyNum, G4int &col, G4int &row) const {
 	for(std::vector<nDetDetector>::const_iterator iter = userDetectors.begin(); iter != userDetectors.end(); iter++){
+		if(iter->getSegmentFromCopyNum(copyNum, col, row))
+			return true;
+	}
+
+	for(std::vector<nDetImplant>::const_iterator iter = userImplants.begin(); iter != userImplants.end(); iter++){
 		if(iter->getSegmentFromCopyNum(copyNum, col, row))
 			return true;
 	}
@@ -403,6 +444,172 @@ bool nDetRunAction::processDetector(nDetDetector* det){
 	return true;
 }
 
+bool nDetRunAction::processImplant(nDetImplant* imp){
+	if(!imp || imp->empty()) // No detected photons, do not process
+		return false;
+
+	// Get the time offset due to straggling in the target (if applicable)
+	double targetTimeOffset = source->GetTargetTimeOffset();
+	bool Ftrigger = false;
+	// Get pointers to the CoM calculators
+	centerOfMass *cmI = imp->getCenterOfMass();
+
+	debugData.nPhotons[0] += cmI->getNumDetected();
+	
+	// Compute the total number of detected photons
+	outImplantData.nPhotonsDet += cmI->getNumDetected();
+		
+	// Check for valid bar detection
+	if(cmI->getNumDetected() > 0)
+		evtData.goodEvent = true;
+		
+	// Compute the photon detection efficiency
+	outImplantData.nPhotonsTot = stacking->GetNumPhotonsProduced();
+	if(outImplantData.nPhotonsTot > 0)
+		outImplantData.photonDetEff = outImplantData.nPhotonsDet/(double)outImplantData.nPhotonsTot;
+	else
+		outImplantData.photonDetEff = -1;			
+
+	// Get the photon center-of-mass positions
+	G4ThreeVector centerI = cmI->getCenter();
+	debugData.photonDetComX[0] = centerI.getX(); 
+	debugData.photonDetComY[0] = centerI.getY();
+	//debugData.photonDetComZ[0] = centerL.getZ(); debugData.photonDetComZ[1] = centerR.getZ(); 
+
+	// Get photon arrival times at the PMTs
+	debugData.photonMinTime[0] = cmI->getMinArrivalTime();
+	debugData.photonAvgTime[0] = cmI->getAvgArrivalTime();
+	
+	pmtResponse *pmtI = cmI->getPmtResponse();
+
+	// The ADC clock is running continuously so the PMT signals may arrive at any time relative
+	// to the clock. To remove any inherent bias from this, we latch the ADCs at a random time 
+	// in the range [-adcTick/2, +adcTick/2]. The pmtResponse class will automatically remove 
+	// the latching time after running the CFD.
+	double latch = G4UniformRand()-0.5; // [-0.5, 0.5]
+	pmtI->setAdcLatchTicks(latch);
+	
+	// "Digitize" the light pulses.
+	pmtI->digitize();
+	
+	// Check for saturated pulse.
+	if(pmtI->getPulseIsSaturated()){
+		Display::WarningPrint("Implant PMT's traces have saturated! Recommend lowering the gain.", "nDetRunAction");
+	}
+	
+	// Copy the trace into the trace vector.
+	if(outputTraces){
+		pmtI->copyTrace(traceData.left); //This might be wrong 
+		traceData.mult++;
+	}		
+	
+	// Do some light pulse analysis
+	debugData.pulsePhase[0] = pmtI->analyzePolyCFD() + targetTimeOffset;
+	debugData.pulseQDC[0] = pmtI->integratePulseFromMaximum();
+	debugData.pulseMax[0] = pmtI->getMaximum();
+	debugData.pulseMaxTime[0] = pmtI->getMaximumTime();
+	debugData.pulseArrival[0] = pmtI->getWeightedPhotonArrivalTime();	
+
+	// Set Trigger boolean for events that would register in DAQ
+	if(pmtI->getTrigger() && abs(pmtI->getMaximumTime()) < 5) Ftrigger = true;
+
+	// Print the digitized traces.
+	if(pmtI->getPrintTrace()){
+		size_t traceLength = pmtI->getPulseLength();
+		unsigned short *traceI = pmtI->getDigitizedPulse();
+		std::cout << "***********************************************************\n";
+		std::cout << "* PhotonsTot     : " << outImplantData.nPhotonsTot << std::endl;
+		std::cout << "* PhotonsDet     : " << outImplantData.nPhotonsDet << std::endl;
+		std::cout << "* MaxIndex       : " << pmtI->getMaximumIndex() << std::endl;
+		std::cout << "* Baseline       : " << pmtI->getBaseline() << std::endl;	
+		std::cout << "* Maximum        : " << pmtI->getMaximum() <<  std::endl;
+		std::cout << "* MaxTime        : " << pmtI->getMaximumTime() << std::endl;
+		std::cout << "* WeightedArrival: " << pmtI->getWeightedPhotonArrivalTime() << std::endl;
+		std::cout << "* MinimumArrival : " << pmtI->getMinimumPhotonArrivalTime() << std::endl;
+		std::cout << "***********************************************************\n";
+
+		int adcClockTick = pmtI->getAdcClockInNanoseconds();
+		for(size_t i = 0; i < traceLength; i++){
+			std::cout << i*adcClockTick << "\t" << traceI[i] << std::endl;
+		}
+	}
+	
+	// Get the digitizer response of the anodes.
+	/*pmtResponse *anodeResponseL = cmL->getAnodeResponse();
+	pmtResponse *anodeResponseR = cmR->getAnodeResponse();
+
+	// Digitize anode waveforms and integrate.
+	float anodeQDC[2][4];
+	for(size_t i = 0; i < 4; i++){
+		anodeResponseL[i].digitize();
+		anodeResponseR[i].digitize();
+		debugData.anodeQDC[0][i] = anodeResponseL[i].integratePulseFromMaximum();
+		debugData.anodeQDC[1][i] = anodeResponseR[i].integratePulseFromMaximum();
+	}	
+	
+	// Compute the anode positions.
+	for(size_t i = 0; i < 2; i++){
+		debugData.reconDetComX[i] = -((anodeQDC[i][0]+anodeQDC[i][1])-(anodeQDC[i][2]+anodeQDC[i][3]))/(anodeQDC[i][0]+anodeQDC[i][1]+anodeQDC[i][2]+anodeQDC[i][3]);
+		debugData.reconDetComY[i] = ((anodeQDC[i][1]+anodeQDC[i][2])-(anodeQDC[i][3]+anodeQDC[i][0]))/(anodeQDC[i][0]+anodeQDC[i][1]+anodeQDC[i][2]+anodeQDC[i][3]);
+	}
+	outImplantData.reconComX = (debugData.reconDetComX[0] + debugData.reconDetComX[1]) / 2;
+	outImplantData.reconComY = (debugData.reconDetComY[0] + debugData.reconDetComY[1]) / 2;*/
+	
+	if(outputDebug || outputMultiDebug){
+		// Perform CFD on digitized anode waveforms.
+		/*for(size_t i = 0; i < 4; i++){
+			debugData.anodePhase[0][i] = anodeResponseL[i].analyzePolyCFD() + targetTimeOffset; // left
+			debugData.anodePhase[1][i] = anodeResponseR[i].analyzePolyCFD() + targetTimeOffset; // right
+		}*/
+
+		G4ThreeVector nCenterMass(debugData.nComX, debugData.nComY, debugData.nComZ);
+		G4ThreeVector nIncidentPos(debugData.nEnterPosX, debugData.nEnterPosY, debugData.nEnterPosZ);
+		G4ThreeVector nExitPos(debugData.nExitPosX, debugData.nExitPosY, debugData.nExitPosZ);
+
+		// Compute the neutron scatter center-of-mass.
+		nCenterMass = (1/debugData.neutronWeight)*nCenterMass;
+	
+		// Convert the neutron incident/exit positions to the frame of the detector.
+		nIncidentPos = nIncidentPos;
+		nExitPos = nExitPos;
+
+		// Now in the rotated frame of the detector.
+		debugData.nComX = nCenterMass.getX();
+		debugData.nComY = nCenterMass.getY();
+		debugData.nComZ = nCenterMass.getZ();
+		debugData.nEnterPosX = nIncidentPos.getX();
+		debugData.nEnterPosY = nIncidentPos.getY();
+		debugData.nEnterPosZ = nIncidentPos.getZ();
+		debugData.nExitPosX = nExitPos.getX();
+		debugData.nExitPosY = nExitPos.getY();
+		debugData.nExitPosZ = nExitPos.getZ();
+	}
+
+	// Compute the light balance (Z).
+	outImplantData.lightBalance = (debugData.pulseQDC[0]-debugData.pulseQDC[1])/(debugData.pulseQDC[0]+debugData.pulseQDC[1]);
+	outImplantData.tdiff = (debugData.pulsePhase[0]-debugData.pulsePhase[1]);
+	outImplantData.photonTdiff = (debugData.photonAvgTime[0] - debugData.photonAvgTime[1]);
+	
+	// Compute "bar" variables.
+	double offset = distribution(generator);
+	outImplantData.barTOF = (debugData.pulsePhase[0]+debugData.pulsePhase[1])/2-offset;
+	outImplantData.barQDC = std::sqrt(debugData.pulseQDC[0]*debugData.pulseQDC[1]);
+	outImplantData.barMaxADC = std::sqrt(abs(debugData.pulseMax[0])*abs(debugData.pulseMax[1]));
+	outImplantData.barTrig = Ftrigger;
+	outImplantData.photonTOF = (debugData.photonAvgTime[0]+debugData.photonAvgTime[1])/2.0-offset;
+	outImplantData.photonComX = (debugData.photonDetComX[0] + debugData.photonDetComX[1]) / 2;
+	outImplantData.photonComY = (debugData.photonDetComY[0] + debugData.photonDetComY[1]) / 2;
+	// Get the segment of the detector where the photon CoM occurs.
+	cmI->getCenterSegment(debugData.centerOfMassColumn[0], debugData.centerOfMassRow[0]);	
+
+	// Update photon statistics.
+	numPhotonsTotal += outImplantData.nPhotonsTot;
+	numPhotonsDetTotal += outImplantData.nPhotonsDet;
+	
+
+	return true;
+}
+
 bool nDetRunAction::processStartDetector(nDetDetector* det, double &startTime){
 	if(!processDetector(det)) // No detected photons, do not process
 		return false;
@@ -410,6 +617,17 @@ bool nDetRunAction::processStartDetector(nDetDetector* det, double &startTime){
 	// Return the time-of-flight from the start detector
 	startTime = outData.barTOF;
 		
+	return true;
+}
+
+bool nDetRunAction::processStartImplant(nDetImplant* imp, double &startTime){
+	if(!processImplant(imp)){ // No detected photons, do not process
+		return false;
+	}
+	
+	// Return the time-of-flight from the start detector
+	startTime = outImplantData.barTOF;
+
 	return true;
 }
 
@@ -424,21 +642,8 @@ void nDetRunAction::process(){
 	}
 
 	short detID = 0;
-	if(!startDetector){ // Un-triggered mode (default)
-		for(std::vector<nDetDetector>::iterator iter = userDetectors.begin(); iter != userDetectors.end(); iter++){
-			if(!processDetector(&(*iter))){ // Skip the start detector because we already processed it
-				detID++;
-				continue;
-			}
-			
-			// Push data onto the output branch for multiple detectors
-			if(userDetectors.size() > 1)
-				multData.Append(outData, detID++);
-		}
-	}
-	else{ // Start triggered mode
-		double startTime;
-		if(processStartDetector(startDetector, startTime)){ // Check for valid start signal
+	double startTime;
+	if(processStartDetector(startDetector, startTime)){ // Check for valid start signal
 			for(std::vector<nDetDetector>::iterator iter = userDetectors.begin(); iter != userDetectors.end(); iter++){
 				// Skip the start detector because we already processed it
 				if(&(*iter) != startDetector && !processDetector(&(*iter))){ // Skip events with no detected photons
@@ -452,6 +657,48 @@ void nDetRunAction::process(){
 				// Push data onto the output branch for multiple detectors
 				if(userDetectors.size() > 1)
 					multData.Append(outData, detID++);
+			}
+		}
+	else if(endImplant){ // Un-triggered mode (default)
+		for(std::vector<nDetImplant>::iterator iter = userImplants.begin(); iter != userImplants.end(); iter++){
+			if(!processImplant(&(*iter))){ // Skip the start detector because we already processed it
+				detID++;
+				continue;
+			}
+			
+			// Push data onto the output branch for multiple detectors
+			if(userImplants.size() > 1)
+				multData.Append(outImplantData, detID++);
+		}
+	}
+	else if(endDetector){ // Un-triggered mode (default)
+		for(std::vector<nDetDetector>::iterator iter = userDetectors.begin(); iter != userDetectors.end(); iter++){
+			if(!processDetector(&(*iter))){ // Skip the start detector because we already processed it
+				detID++;
+				continue;
+			}
+			
+			// Push data onto the output branch for multiple detectors
+			if(userDetectors.size() > 1)
+				multData.Append(outData, detID++);
+		}
+	}
+	
+	else{ // Start triggered mode
+		if(processStartImplant(startImplant, startTime)){ // Check for valid start signal
+			for(std::vector<nDetImplant>::iterator iter = userImplants.begin(); iter != userImplants.end(); iter++){
+				// Skip the start detector because we already processed it
+				if(&(*iter) != startImplant && !processImplant(&(*iter))){ // Skip events with no detected photons
+					detID++;
+					continue;
+				}
+
+				// Update the time-of-flight of the event
+				outImplantData.barTOF = outImplantData.barTOF - startTime;
+				
+				// Push data onto the output branch for multiple detectors
+				if(userImplants.size() > 1)
+					multData.Append(outImplantData, detID++);
 			}
 		}
 	}
@@ -469,6 +716,9 @@ void nDetRunAction::process(){
 
 	// Clear all statistics.
 	for(std::vector<nDetDetector>::iterator iter = userDetectors.begin(); iter != userDetectors.end(); iter++)
+		iter->clear();
+
+	for(std::vector<nDetImplant>::iterator iter = userImplants.begin(); iter != userImplants.end(); iter++)
 		iter->clear();
 	
 	if(stacking) stacking->Reset();
@@ -491,14 +741,15 @@ bool nDetRunAction::AddDetectedPhoton(const G4Step *step, const double &mass/*=1
 		Display::WarningPrint("INVALID POST POINT!", "nDetRunAction");
 		return false;
 	}
-	
+
 	// Find which detector this optical photon is inside.
 	G4int copyNum = step->GetPostStepPoint()->GetTouchable()->GetCopyNumber();
-	bool foundMatch=false, isLeft;
+	bool foundMatch=false, isLeft=0, isImplant=0;
 	G4ThreeVector *detPos;
 	G4RotationMatrix *detRot;
 	centerOfMass *hitDetPmtL;
 	centerOfMass *hitDetPmtR;
+	centerOfMass *hitDetPmtI;
 	for(std::vector<nDetDetector>::iterator iter = userDetectors.begin(); iter != userDetectors.end(); iter++){
 		if(iter->checkPmtCopyNumber(copyNum, isLeft)){
 			foundMatch = true;
@@ -506,6 +757,15 @@ bool nDetRunAction::AddDetectedPhoton(const G4Step *step, const double &mass/*=1
 			detRot = iter->getRotation();
 			hitDetPmtL = iter->getCenterOfMassL();
 			hitDetPmtR = iter->getCenterOfMassR();
+			break;
+		}
+	}
+	for(std::vector<nDetImplant>::iterator iter = userImplants.begin(); iter != userImplants.end(); iter++){
+		if(iter->checkPmtCopyNumber(copyNum, isImplant)){
+			foundMatch = true;
+			detPos = iter->getPosition();
+			detRot = iter->getRotation();
+			hitDetPmtI = iter->getCenterOfMass();
 			break;
 		}
 	}
@@ -524,8 +784,14 @@ bool nDetRunAction::AddDetectedPhoton(const G4Step *step, const double &mass/*=1
 		if(hitDetPmtL->addPoint(energy, time, position, mass))
 			return true;
 	}
-	if(hitDetPmtR->addPoint(energy, time, position, mass))
-		return true;
+	else if(isImplant){
+		if(hitDetPmtI->addPoint(energy, time, position, mass))
+			return true;
+	}
+	else{
+		if(hitDetPmtR->addPoint(energy, time, position, mass))
+			return true;
+	}
 	return false;
 }
 

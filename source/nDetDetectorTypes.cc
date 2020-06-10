@@ -27,6 +27,12 @@ nDetDetector* nDetDetectorTypes::getDetectorType(const G4String &geom){
 	return retval;
 }
 
+nDetImplant* nDetDetectorTypes::getImplantType(const G4String &geom){
+	nDetImplant *retval = NULL;
+	retval = new implantType();
+	return retval;
+}
+
 nDetDetector* nDetDetectorTypes::getDetectorType(const G4String &geom, nDetConstruction *construction, nDetMaterials *matptr){
 	nDetDetector *retval = NULL;
 	if(geom == "next" || geom == "module") // Next module (segmented)
@@ -37,6 +43,12 @@ nDetDetector* nDetDetectorTypes::getDetectorType(const G4String &geom, nDetConst
 		retval = new rectangularType(construction, matptr);
 	else if(geom == "cylinder") // Cylindrical detector
 		retval = new cylindricalType(construction, matptr);
+	return retval;
+}
+
+nDetImplant* nDetDetectorTypes::getImplantType(const G4String &geom, nDetConstruction *construction, nDetMaterials *matptr){
+	nDetImplant *retval = NULL;
+	retval = new implantType(construction, matptr);
 	return retval;
 }
 
@@ -309,3 +321,125 @@ void cylindricalType::buildDetector(){
 	layerSizeY = fDetectorHeight;
 	offsetZ = fDetectorLength/2;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// class implantType
+///////////////////////////////////////////////////////////////////////////////
+
+void implantType::prepareToBuild(){
+	// Set the maximum detector body size
+	maxBodySize = G4ThreeVector(fDetectorWidth, fDetectorHeight, fDetectorLength);
+}
+
+void implantType::buildDetector(){
+	const G4double cellWidth = GetSegmentWidth();
+	const G4double cellHeight = GetSegmentHeight();
+	
+	// Get the number of rows and columns for this segmented detector
+	int Ncol = fNumColumns;
+	int Nrow = fNumRows;
+
+	// Update the detector's copy numbers
+	firstSegmentCopyNum = scintCopyNum; 
+	lastSegmentCopyNum = firstSegmentCopyNum; //startCopyNum+col*row;
+
+    // Construct the scintillator cell
+    G4Box *cellScint = new G4Box("scintillator", cellWidth/2, cellHeight/2, fDetectorLength/2);
+    G4LogicalVolume *cellScint_logV = new G4LogicalVolume(cellScint, scintMaterial, "scint_log");
+    cellScint_logV->SetVisAttributes(scintVisAtt);
+
+	G4Box *mylarVertLayer = NULL;
+	G4Box *mylarHorizLayer = NULL;
+	
+	G4LogicalVolume *mylarVertLayer_logV = NULL;
+	G4LogicalVolume *mylarHorizLayer_logV = NULL;
+
+	// Build the wrapping.
+	G4PVPlacement *wrapping_physV = NULL;
+	if(WrappingEnabled()){
+		// Construct the outer wrapping.
+		G4Box *wrappingBox = new G4Box("wrappingBox", fDetectorWidth/2+fWrappingThickness, fDetectorHeight/2+fWrappingThickness, fDetectorLength/2);
+		G4Box *scintBox = new G4Box("scintBox", fDetectorWidth/2, fDetectorHeight/2, fDetectorLength/2);
+		
+		G4SubtractionSolid *wrappingBody = new G4SubtractionSolid("wrapping", wrappingBox, scintBox);
+		G4LogicalVolume *wrapping_logV = new G4LogicalVolume(wrappingBody, wrappingMaterial, "wrapping_logV");
+		wrapping_logV->SetVisAttributes(wrappingVisAtt);
+		
+		// Place the outer wrapping into the assembly.
+		wrapping_physV = addToDetectorBody(wrapping_logV, "Wrapping");
+		
+		// Construct vertical and horizontal reflector layers for later use.
+		mylarVertLayer = new G4Box("mylarVertLayer", fWrappingThickness/2, fDetectorHeight/2, fDetectorLength/2);
+		mylarHorizLayer = new G4Box("mylarHorizLayer", cellWidth/2, fWrappingThickness/2, fDetectorLength/2);
+
+		mylarVertLayer_logV = new G4LogicalVolume(mylarVertLayer, wrappingMaterial, "mylarVertLayer_logV");
+		mylarHorizLayer_logV = new G4LogicalVolume(mylarHorizLayer, wrappingMaterial, "mylarHorizLayer_logV");
+		
+		mylarVertLayer_logV->SetVisAttributes(wrappingVisAtt);
+		mylarHorizLayer_logV->SetVisAttributes(wrappingVisAtt);
+	}
+
+	// Place the scintillator segments into the assembly.
+	std::vector<G4PVPlacement*> mylarVertLayer_physV(Ncol, NULL);
+	std::vector<std::vector<G4PVPlacement*> > mylarHorizLayer_physV(Ncol, std::vector<G4PVPlacement*>(Nrow, NULL));
+	std::vector<std::vector<G4PVPlacement*> > cellScint_physV(Ncol, std::vector<G4PVPlacement*>(Nrow, NULL));	
+	for(int col = 0; col < Ncol; col++){
+		for(int row = 0; row < Nrow; row++){
+			G4ThreeVector cellCenter(-fDetectorWidth/2 + col*fWrappingThickness + (col+0.5)*cellWidth, -fDetectorHeight/2 + row*fWrappingThickness + (row+0.5)*cellHeight, 0);
+
+			// Copy numbers (segment IDs), indexed from 1
+			std::stringstream stream; stream << "Scint-" << col << "," << row;
+			cellScint_physV[col][row] = addSegmentToBody(cellScint_logV, stream.str(), cellCenter);
+			scintBody_physV.push_back(cellScint_physV[col][row]);
+		
+			// Place vertical and horizontal reflectors.
+			if(WrappingEnabled()){ 
+				if(row == 0 && col != Ncol-1){ // New vertical reflector layer.
+					std::stringstream stream2; stream2 << "Wrapping-" << col;
+					mylarVertLayer_physV[col] = addToDetectorBody(mylarVertLayer_logV, stream2.str().c_str(), G4ThreeVector(cellCenter.getX()+cellWidth/2+fWrappingThickness/2, 0, 0));
+				}
+				if(row != Nrow-1){ // New horizontal reflector layer.
+					std::stringstream stream2; stream2 << "Wrapping-" << col << "," << row;
+					mylarHorizLayer_physV[col][row] = addToDetectorBody(mylarHorizLayer_logV, stream2.str().c_str(), G4ThreeVector(cellCenter.getX(), cellCenter.getY()+cellHeight/2+fWrappingThickness/2, 0));
+				}
+			}
+		}
+	}
+
+	// Define logical reflector surfaces.
+	if(WrappingEnabled()){ 
+		for(int col = 0; col < Ncol; col++){
+			for(int row = 0; row < Nrow; row++){
+				G4PVPlacement *cellPhysical = cellScint_physV[col][row];
+				
+				int leftCol = col-1;
+				int rightCol = col+1;
+				int downRow = row-1;
+				int upRow = row+1;
+				
+				// Border with the outer wrapping.
+				if((col == 0 || row == 0) || (col == Ncol-1 || row == Nrow-1)) 
+					new G4LogicalBorderSurface("Wrapping", cellPhysical, wrapping_physV, wrappingOpSurf);
+				
+				// Internal reflector layers.
+				if(leftCol >= 0 && leftCol < Ncol) // Left side vertical layer.
+					new G4LogicalBorderSurface("Wrapping", cellPhysical, mylarVertLayer_physV.at(col-1), wrappingOpSurf);
+				if(rightCol >= 0 && rightCol < Ncol) // Right side vertical layer.
+					new G4LogicalBorderSurface("Wrapping", cellPhysical, mylarVertLayer_physV.at(col), wrappingOpSurf);
+				if(downRow >= 0 && downRow < Nrow) // Bottom side horizontal layer.
+					new G4LogicalBorderSurface("Wrapping", cellPhysical, mylarHorizLayer_physV.at(col).at(row-1), wrappingOpSurf);
+				if(upRow >= 0 && upRow < Nrow) // Top side vertical layer.
+					new G4LogicalBorderSurface("Wrapping", cellPhysical, mylarHorizLayer_physV.at(col).at(row), wrappingOpSurf);
+			}
+		}
+	}
+	
+	// Update the scintillator copy number.
+	scintCopyNum += Nrow*Ncol;
+	
+	// Update the Z offset and layer width/height
+	layerSizeX = fDetectorWidth;
+	layerSizeY = fDetectorHeight;
+	offsetZ = fDetectorLength/2;
+}
+

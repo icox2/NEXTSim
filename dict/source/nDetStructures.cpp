@@ -128,6 +128,71 @@ void nDetOutputStructure::Zero(){
 	photonComRow = 0;
 }
 
+///////////////////////////////////////////////////////////
+// nDetImplantOutputStructure
+///////////////////////////////////////////////////////////
+
+nDetImplantOutputStructure::nDetImplantOutputStructure(){
+	nPhotonsTot = 0;
+	nPhotonsDet = 0;
+	lightBalance = 0;
+	tdiff = 0;
+	photonDetEff = 0;
+	barTOF = 0;
+	barQDC = 0;
+	barMaxADC = 0;
+	barTrig = false;
+	photonTOF = 0;
+	photonComX = 0;
+	photonComY = 0;
+	reconComX = 0;
+	reconComY = 0;
+	photonComCol = 0;
+	photonComRow = 0;
+}
+
+void nDetImplantOutputStructure::SetValues(const unsigned int &nPhotonsTot_, const unsigned int &nPhotonsDet_, const double &lightBalance_, const double &tdiff_, const double &photonTdiff_, const double &photonDetEff_, const double &barTOF_, const double &barQDC_, const double &barMaxADC_, const bool &barTrig_, const double &photonTOF_, const double &photonComX_, const double &photonComY_, const double &reconComX_, const double &reconComY_, const short &photonComCol_, const short &photonComRow_){
+	nPhotonsTot = nPhotonsTot_;
+	nPhotonsDet = nPhotonsDet_;
+	lightBalance = lightBalance_;
+	tdiff = tdiff_;
+	photonTdiff = photonTdiff_;
+	photonDetEff = photonDetEff_;
+	barTOF = barTOF_;
+	barQDC = barQDC_;
+	barMaxADC = barMaxADC_;
+	barTrig = barTrig_;
+	photonTOF = photonTOF_;
+	photonComX = photonComX_;
+	photonComY = photonComY_;
+	reconComX = reconComX_;
+	reconComY = reconComY_;
+	photonComCol = photonComCol_;
+	photonComRow = photonComRow_;
+}
+
+void nDetImplantOutputStructure::Append(){
+}
+
+void nDetImplantOutputStructure::Zero(){
+	nPhotonsTot = 0;
+	nPhotonsDet = 0;
+	lightBalance = 0;
+	tdiff = 0;
+	photonTdiff = 0;
+	photonDetEff = 0;
+	barTOF = 0;
+	barQDC = 0;
+	barMaxADC = 0;
+	barTrig = false;
+	photonTOF = 0;
+	photonComX = 0;
+	photonComY = 0;
+	reconComX = 0;
+	reconComY = 0;
+	photonComCol = 0;
+	photonComRow = 0;
+}
 
 ///////////////////////////////////////////////////////////
 // nDetMultiOutputStructure
@@ -183,6 +248,29 @@ void nDetMultiOutputStructure::Append(const nDetOutputStructure &output, const s
 	detID.push_back(detID_);
 	multiplicity++;
 }
+
+void nDetMultiOutputStructure::Append(const nDetImplantOutputStructure &output, const short &detID_){
+	nPhotonsTot.push_back(output.nPhotonsTot);
+	nPhotonsDet.push_back(output.nPhotonsDet);
+	lightBalance.push_back(output.lightBalance);
+	tdiff.push_back(output.tdiff);
+	photonTdiff.push_back(output.photonTdiff);
+	photonDetEff.push_back(output.photonDetEff);
+	barTOF.push_back(output.barTOF);
+	barQDC.push_back(output.barQDC);
+	barMaxADC.push_back(output.barMaxADC);
+	barTrig.push_back(output.barTrig);
+	photonTOF.push_back(output.photonTOF);
+	photonComX.push_back(output.photonComX);
+	photonComY.push_back(output.photonComY);
+	reconComX.push_back(output.reconComX);
+	reconComY.push_back(output.reconComY);
+	photonComCol.push_back(output.photonComCol);
+	photonComRow.push_back(output.photonComRow);
+	detID.push_back(detID_);
+	multiplicity++;
+}
+
 
 void nDetMultiOutputStructure::Append(const nDetDebugStructure &debug, const short nScatters_){	
 	for(short iv=0; iv < nScatters_; iv++){

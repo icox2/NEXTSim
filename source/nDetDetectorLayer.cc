@@ -23,6 +23,10 @@ void greaseLayer::construct(nDetDetector *obj){
 	obj->applyGreaseLayer(x, y, thickness);
 }
 
+void greaseLayer::construct(nDetImplant *obj){
+	obj->applyGreaseLayer(x, y, thickness);
+}
+
 std::string greaseLayer::syntaxStr() const {
 	return std::string("addGreaseLayer <width> <height> [thickness]");
 }
@@ -46,6 +50,10 @@ bool diffuserLayer::decodeArgs(){
 }
 
 void diffuserLayer::construct(nDetDetector *obj){
+	obj->applyDiffuserLayer(x, y, thickness);
+}
+
+void diffuserLayer::construct(nDetImplant *obj){
 	obj->applyDiffuserLayer(x, y, thickness);
 }
 
@@ -77,6 +85,10 @@ void lightGuideLayer::construct(nDetDetector *obj){
 	obj->applyLightGuide(x1, x2, y1, y2, thickness);
 }
 
+void lightGuideLayer::construct(nDetImplant *obj){
+	obj->applyLightGuide(x1, x2, y1, y2, thickness);
+}
+
 std::string lightGuideLayer::syntaxStr() const {
 	return std::string("addLightGuide <width1> <width2> <height1> <height2> <thickness> [material=G4_SILICON_DIOXIDE]");
 }
@@ -103,6 +115,10 @@ bool gdmlLightGuideLayer::decodeArgs(){
 }
 
 void gdmlLightGuideLayer::construct(nDetDetector *obj){
+	obj->loadLightGuide(&solid, rotVector);
+}
+
+void gdmlLightGuideLayer::construct(nDetImplant *obj){
 	obj->loadLightGuide(&solid, rotVector);
 }
 

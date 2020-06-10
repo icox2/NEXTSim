@@ -178,6 +178,61 @@ class nDetOutputStructure : public TObject {
 };
 
 
+class nDetImplantOutputStructure : public TObject {
+  public:
+	unsigned int nPhotonsTot; ///< Total number of scintillation photons produced
+	unsigned int nPhotonsDet; ///< Total number of optical photons detected by both PMTs
+	double lightBalance; ///< Ratio of the difference of left and right TQDC to the sum of left and right TQDC
+	double tdiff; ///< Time difference between left and right PolyCFD phase (in ns)
+	double photonTdiff; ///< Time differnence between average photon arrival time for each detector.
+	double photonDetEff; ///< Ratio of optical photons detected by a PMT to the total number of photons generated
+	double barTOF; ///< Average of the left and right dynode light pulse phases computed using PolyCFD (in ns)
+	double barQDC; ///< Average of the left and right dynode light pulse integrals
+	double barMaxADC; ///< Average of the left and right dynode light pulse maxima (in ADC channels)
+	bool   barTrig; ///< Flag to register if both PMT's would have triggered a digitizer filter
+	double photonTOF; ///< Average of left and right average photon arrival time (in ns)
+	double photonComX; ///< Average of the left and right photon center-of-mass X position (in mm)
+	double photonComY; ///< Average of the left and right photon center-of-mass Y position (in mm)
+	double reconComX; ///< Left and right PMT photon center-of-mass along the X-axis computed using Anger Logic reconstruction
+	double reconComY; ///< Left and right PMT photon center-of-mass along the Y-axis computed using Anger Logic reconstruction
+	short photonComCol; ///< Segmented PMT anode column corresponding to the photon center-of-mass for the left and right PMT
+	short photonComRow; ///< Segmented PMT anode row corresponding to the photon center-of-mass for the left and right PMT
+
+	// Default constructor
+	nDetImplantOutputStructure();
+
+	// Destructor
+	~nDetImplantOutputStructure(){}
+
+	/** Set single entry data fields
+	  * @param nPhotonsTot_ Total number of scintillation photons produced
+	  * @param nPhotonsDet_ Total number of optical photons detected by both PMTs
+	  * @param lightBalance_ Ratio of the difference of left and right TQDC to the sum of left and right TQDC
+	  * @param photonDetEff_ Ratio of optical photons detected by a PMT to the total number of photons generated
+	  * @param barTOF_ Average of the left and right dynode light pulse phases computed using PolyCFD (in ns)
+	  * @param barQDC_ Average of the left and right dynode light pulse integrals
+	  * @param barMaxADC_ Average of the left and right dynode light pulse maxima (in ADC channels)
+	  * @param photonComX_ Average of the left and right photon center-of-mass X position (in mm)
+	  * @param photonComY_ Average of the left and right photon center-of-mass Y position (in mm)
+	  * @param reconComX_ Left and right PMT photon center-of-mass along the X-axis computed using Anger Logic reconstruction
+	  * @param reconComY_ Left and right PMT photon center-of-mass along the Y-axis computed using Anger Logic reconstruction
+	  * @param photonComCol_ Segmented PMT anode column corresponding to the photon center-of-mass for the left and right PMT
+	  * @param photonComRow_ Segmented PMT anode row corresponding to the photon center-of-mass for the left and right PMT
+	  */
+
+	void SetValues(const unsigned int &nPhotonsTot_, const unsigned int &nPhotonsDet_, const double &lightBalance_, const double &tdiff_, const double &photonTdiff_, const double &photonDetEff_, const double &barTOF_, const double &barQDC_, const double &barMaxADC_, const bool &barTrig_, const double &photonTOF_, const double &photonComX_, const double &photonComY_, const double &reconComX_, const double &reconComY_, const short &photonComCol_, const short &photonComRow_);
+
+	// Push back with data
+	void Append();
+
+	// Zero all variables
+	void Zero();
+
+	/// @cond DUMMY
+	ClassDef(nDetImplantOutputStructure, 1); // nDetImplantOutput
+	/// @endcond
+};
+
 /*! \class nDetDebugStructure
  *  \brief Container for NEXTSim simulation variable output
  *  \author Cory R. Thornsbery
@@ -361,6 +416,8 @@ class nDetMultiOutputStructure : public TObject {
 	  * @param detID_ ID of the detector which fired
 	  */
 	void Append(const nDetOutputStructure &output, const short &detID_);
+
+	void Append(const nDetImplantOutputStructure &output, const short &detID_);
 
 	void Append(const nDetDebugStructure &debug, const short nScatters_);
 
