@@ -41,7 +41,6 @@ nDetMasterOutputFile::nDetMasterOutputFile(){
 	runIndex = 1;
 	fFile = NULL;
 	fTree = NULL;
-	fImpTree = NULL;
 
 	runTitle = "NEXT Geant4 output";
 	runIndex = 1;
@@ -161,7 +160,6 @@ bool nDetMasterOutputFile::openRootFile(const G4Run* aRun){
 	// Create root tree.
 	if(treename.empty()) treename = "data"; //"neutronEvent";
 	fTree = new TTree(treename.c_str(), "Primary particle scattering data");
-	fImpTree = new TTree("impData", "Data from the implant detector");
 
 	// Add the branches
 	fTree->Branch("event", evtData);
@@ -189,7 +187,6 @@ bool nDetMasterOutputFile::closeRootFile(){
 	if(fFile){
 		fFile->cd();
 		fTree->Write();
-		fImpTree->Write();
 		fFile->Close();
 		delete fFile;
 		fFile = NULL;
@@ -212,7 +209,6 @@ bool nDetMasterOutputFile::fillBranch(const nDetDataPack &pack){
 
 	if(outputBadEvents || pack.goodEvent()){
 		fTree->Fill(); // Fill the tree
-		fImpTree->Fill();
 	}	
 
 	double avgTimePerEvent;

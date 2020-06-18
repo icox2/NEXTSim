@@ -14,40 +14,34 @@
 # This is important to set for GDML light-guide because
 #  we cannot obtain the information from the model itself.
 /nDet/implant/setPmtDimensions 50.0
-
+/nDet/detector/setPmtDimensions 48.5
 
 # Mylar and optical grease thickness.
 /nDet/implant/setMylarThickness 0.025
 /nDet/implant/setGreaseThickness 0.1
+/nDet/detector/setMylarThickness 0.025
+/nDet/detector/setGreaseThickness 0.1
 
 # Light diffuser.
-/nDet/implant/setDiffuserLength 1.5
-
-# Choose Scintillator
-/nDet/implant/setMaterial yso
+#/nDet/implant/setDiffuserLength 0.5
 
 # PMT segmentation.
 /nDet/implant/setPmtColumns 8
 /nDet/implant/setPmtRows 8
+/nDet/detector/setPmtColumns 8
+/nDet/detector/setPmtRows 8
 
 ##################
-# DETECTOR SETUP #
+# IMPLANT SETUP #
 ##################
 
-# NEXT 2x2x10 in^3
+# Implant 2x2x10 in^3
 /nDet/implant/setDetectorLength 5.0
 /nDet/implant/setDetectorWidth 5.08
 /nDet/implant/setDetectorThickness 50.8
 /nDet/implant/setNumColumns 20
 /nDet/implant/setNumRows 20
 /nDet/implant/setStart 1
-
-# NEXT 3x3x10 in^3
-#/nDet/implant/setDetectorLength 5.4
-#/nDet/implant/setDetectorWidth 7.62
-#/nDet/implant/setDetectorThickness 76.2
-#/nDet/implant/setNumColumns 12
-#/nDet/implant/setNumRows 6
 
 # Set the wrapping.
 /nDet/implant/setWrapping mylar
@@ -57,14 +51,44 @@
 /nDet/implant/setRotation 0 270 0
 /nDet/implant/addGeometry module
 
-# Update the detector.
-/nDet/implant/update
-
 # Load PSPMT gain matrix 
 # NOTE: This MUST be done AFTER calling '/nDet/implant/update' otherwise it will fail
-/nDet/implant/setGainMatrix gains/distortionTest.dat
+#/nDet/implant/setGainMatrix gains/hamamatsuH12700A_LA0967.dat
 
 # Load PSPMT spectral response function
+#/nDet/implant/setSpectralResponse spectral/hamamatsuH12700A.root
+
+##################
+# DETECTOR SETUP #
+##################
+
+# NEXT 2x2x10 in^3
+/nDet/detector/setDetectorLength 25.4
+/nDet/detector/setDetectorWidth 5.08
+/nDet/detector/setDetectorThickness 50.8
+/nDet/detector/setNumColumns 5
+/nDet/detector/setNumRows 5
+
+# Set the wrapping.
+/nDet/detector/setWrapping mylar
+
+# Set the position and rotation of the detector in the lab frame.
+/nDet/detector/setCylindrical 100 0 6
+#/nDet/detector/setRotation 0 0 90
+/nDet/detector/addGeometry module
+
+# Update the implant.
+/nDet/implant/update
+# Update the detector.
+/nDet/detector/update
+
+# Load PSPMT gain matrix 
+# NOTE: This MUST be done AFTER calling '/nDet/detector/update' otherwise it will fail
+/nDet/detector/setGainMatrix gains/hamamatsuH12700A_LA0967.dat
+/nDet/implant/setGainMatrix gains/hamamatsuH12700A_LA0967.dat
+
+# Load PSPMT spectral response function
+/nDet/detector/setSpectralResponse spectral/hamamatsuH12700A.root
 /nDet/implant/setSpectralResponse spectral/hamamatsuH12700A.root
 
 ################
@@ -72,8 +96,8 @@
 ################
 
 # Set the output filename prefix
-/nDet/output/filename distortion_test_1m.root
-/nDet/output/title PSPMT, 0.5 MeV, 1 m from detector
+/nDet/output/filename multi_test_1m.root
+/nDet/output/title PSPMT_Next, 0.5 MeV, 1 m from detector
 #/nDet/output/index 69
 #/nDet/output/overwrite true
 #/nDet/output/persistent true
@@ -128,4 +152,4 @@
 # RUN CONTROL #
 ###############
 
-/run/beamOn 1000
+#/run/beamOn 100

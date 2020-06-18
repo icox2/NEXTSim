@@ -976,7 +976,7 @@ void nDetImplant::loadLightGuide(gdmlSolid *solid, const G4ThreeVector &rotation
 	// Set internal reflectors
 	solid->setLogicalBorders("InnerWrapping", materials->fEsrOpSurf);
 
-	G4double trapezoidZ = offsetZ + solid->getLength()/2;
+	G4double trapezoidZ = offsetZ + solid->getLength()/2.0;
 	std::cout << " nDetConstruction: Loaded GDML model (name=" << solid->getName() << ") with size x=" << solid->getWidth() << " mm, y=" << solid->getThickness() << " mm, z=" << solid->getLength() << " mm\n";
 
 	// Place loaded model into the assembly.

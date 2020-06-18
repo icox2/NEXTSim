@@ -53,6 +53,7 @@ class nDetMaterials{
     G4MaterialPropertiesTable* fTeflonMPT; ///< Material properties table for teflon
     G4MaterialPropertiesTable* fEJ200MPT; ///< Material properties table for EJ-200 scintillator
     G4MaterialPropertiesTable* fEJ276MPT; ///< Material properties table for EJ-276 scintillator
+	G4MaterialPropertiesTable* fYSOMPT; ///< Material properties table for YSO scintillator
     G4MaterialPropertiesTable* fGreaseMPT; ///< Material properties table for optical grease
     G4MaterialPropertiesTable* fSiO2MPT; ///< Material properties table for quartz
     G4MaterialPropertiesTable* fSiliconMPT; ///< Material properties table for silicon
