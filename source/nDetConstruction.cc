@@ -102,9 +102,7 @@ G4VPhysicalVolume* nDetConstruction::ConstructImplant(){
 		currentImplant = imp;
 
 		// Build the detector
-		//det->construct();
 		imp->construct();
-
 		// Place the detector into the world.
 		imp->placeImplant(expHall->getLogicalVolume());
 	}
@@ -274,13 +272,15 @@ bool nDetConstruction::AddImplantGeometry(const G4String &geom){
 	// Segment the PMT photo-sensitive surface
 	if(params.PmtIsSegmented()){
 		setSegmentedPmt();
-		if(!gainMatrixFilename.empty())
+		if(!gainMatrixFilename.empty()){
 			loadPmtGainMatrix();
+		}
 	}
 	
 	// Load the anode quantum efficiency
-	if(!spectralResponseFilename.empty())
+	if(!spectralResponseFilename.empty()){
 		loadPmtSpectralResponse();
+	}
 
 	// Copy the center-of-mass calculators to the new detector
 	centerOfMass *cmI = currentImplant->getCenterOfMass();
@@ -331,7 +331,7 @@ bool nDetConstruction::loadPmtSpectralResponse(){
 }
 
 bool nDetConstruction::loadPmtGainMatrix(){
-	if(!(center[0].loadGainMatrix(gainMatrixFilename.c_str()) && center[1].loadGainMatrix(gainMatrixFilename.c_str()))){
+	if(!(center[1].loadGainMatrix(gainMatrixFilename.c_str()) && center[0].loadGainMatrix(gainMatrixFilename.c_str()))){
 		Display::ErrorPrint("Failed to load PMT anode gain matrix from file!", "nDetConstruction");
 		return false;
 	}
@@ -343,6 +343,8 @@ bool nDetConstruction::loadPmtGainMatrix(){
 void nDetConstruction::AddLightGuideGDML(const G4String &input){
 	if(currentDetector)
 		currentDetector->addLightGuideGDML(input);
+	else if(currentImplant)
+		currentImplant->addLightGuideGDML(input);
 	else
 		Display::ErrorPrint("Cannot add GDML light-guide before a detector is defined!", "nDetConstruction");
 }
@@ -350,6 +352,8 @@ void nDetConstruction::AddLightGuideGDML(const G4String &input){
 void nDetConstruction::AddGrease(const G4String &input){
 	if(currentDetector)
 		currentDetector->addGreaseLayer(input);
+	else if(currentImplant)
+		currentImplant->addGreaseLayer(input);
 	else
 		Display::ErrorPrint("Cannot add grease layer before a detector is defined!", "nDetConstruction");
 }
@@ -357,6 +361,8 @@ void nDetConstruction::AddGrease(const G4String &input){
 void nDetConstruction::AddDiffuser(const G4String &input){
 	if(currentDetector)
 		currentDetector->addDiffuserLayer(input);
+	else if(currentImplant)
+		currentImplant->addDiffuserLayer(input);
 	else
 		Display::ErrorPrint("Cannot add diffuser layer before a detector is defined!", "nDetConstruction");
 }
@@ -364,6 +370,8 @@ void nDetConstruction::AddDiffuser(const G4String &input){
 void nDetConstruction::AddLightGuide(const G4String &input){
 	if(currentDetector)
 		currentDetector->addLightGuideLayer(input);
+	else if(currentImplant)
+		currentImplant->addLightGuideLayer(input);
 	else
 		Display::ErrorPrint("Cannot add light-guide before a detector is defined!", "nDetConstruction");
 }

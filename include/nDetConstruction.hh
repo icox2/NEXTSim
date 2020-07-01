@@ -113,7 +113,7 @@ class nDetConstruction : public G4VUserDetectorConstruction{
 
 	/** Return a pointer to the PMT response for the left PMT
 	  */
-	//pmtResponse *GetPmtResponse(){ return center[0].getPmtResponse(); } //This is for the implant detector
+	pmtResponse *GetPmtResponse(){ return center[0].getPmtResponse(); } //This is for the implant detector
 
 	/** Get a copy of the current vector of detectors
 	  */
