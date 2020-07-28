@@ -202,15 +202,13 @@ bool centerOfMass::addPoint(const double &energy, const double &time, const G4Th
 			increment(xpos, ypos);
 
 			// Add the anger logic currents to the anode outputs.
-			//double totalCurrent = 0;
 			double *current = getCurrent(xpos, ypos);
 			if(current){
 				for(size_t i = 0; i < 4; i++){
 					anodeCurrent[i] += gain*mass*current[i];
-					totalCurrent += current[i];
 				}
 				for(size_t i = 0; i < 4; i++){
-					anodeResponse[i].addPhoton(time, 0, gain*mass*(current[i]/totalCurrent));
+					anodeResponse[i].addPhoton(time, 0, gain*mass*(current[i]));
 				}
 			}
 			

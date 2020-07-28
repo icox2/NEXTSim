@@ -163,7 +163,6 @@ int main(int argc, char** argv){
 		detector->BuildExp(expName);
 	}else std::cout << "<<<<<<<<<<<<<<<<<<<<   No experiment specified for \"-e\" argument. No setup will be constructed. >>>>>>>>>>>>>>>>>>>>\n";
 
-
 	if(yieldMult > 0){ // Modify the photon yield of the detector
 		std::cout << PROGRAM_NAME << ": Setting photon yield multiplier to " << yieldMult << std::endl;
 		detector->SetLightYieldMultiplier(yieldMult);
