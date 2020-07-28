@@ -456,7 +456,7 @@ bool nDetRunAction::processImplant(nDetImplant* imp){
 	params = detector->GetDetectorParameters();
 	centerOfMass *cmI = imp->getCenterOfMass();
 	cmI->setSegmentedPmt(&params);
-	cmI->loadGainMatrix("distortionTest1.dat");
+	cmI->loadGainMatrix("hamamatsuH12700A_LA0967.dat");
 	
 	debugData.nPhotons[0] += cmI->getNumDetected();
 	
