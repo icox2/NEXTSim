@@ -196,6 +196,16 @@ class nDetParticleSource : public G4GeneralParticleSource {
 	  */	
 	void SetNeutronBeam(const double &energy_);
 
+	/** Set a beam of mono-energetic alphas
+	  * @param energy_ Energy of the beam (in MeV)
+	  */	
+	void SetAlphaBeam(const double &energy_);
+
+		/** Set a beam of mono-energetic ions
+	  * @param energy_ Energy of the beam (in MeV)
+	  */	
+	void SetIonBeam(const G4String &str);
+
 	/** Set a beam of mono-energetic gamma-rays
 	  * @param energy_ Energy of the beam (in MeV)
 	  */	

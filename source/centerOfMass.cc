@@ -124,10 +124,10 @@ bool centerOfMass::loadSpectralResponse(const char *fname){
 }
 
 bool centerOfMass::loadGainMatrix(const char *fname){
-	if(gainMatrix.empty() || Ncol*Nrow == 0) return false;
-	std::ifstream gainFile(fname);
-	if(!gainFile.good()) return false;
-	
+	if(gainMatrix.empty() || Ncol*Nrow == 0) {std::cout<<"Gain Matrix Empty"<<std::endl; return false; }
+	std::ifstream gainFile;
+	gainFile.open(fname);
+	if(!gainFile.good()) { std::cout<<"Gain File Bad"<<std::endl; return false;}
 	double readval;
 	for(short col = 0; col < Ncol; col++){
 		for(short row = 0; row < Nrow; row++){
@@ -202,7 +202,7 @@ bool centerOfMass::addPoint(const double &energy, const double &time, const G4Th
 			increment(xpos, ypos);
 
 			// Add the anger logic currents to the anode outputs.
-			double totalCurrent = 0;
+			//double totalCurrent = 0;
 			double *current = getCurrent(xpos, ypos);
 			if(current){
 				for(size_t i = 0; i < 4; i++){
@@ -233,7 +233,7 @@ bool centerOfMass::addPoint(const double &energy, const double &time, const G4Th
 			response.addPhoton(time, wavelength, gain);
 
 			// Add the "mass" to the others weighted by the individual anode gain
-			center += pos;
+			center += pos; //add pos calculated based on anode current
 			totalMass += mass;
 		}
 	}

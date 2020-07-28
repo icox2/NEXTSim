@@ -26,7 +26,7 @@ class centerOfMass{
   public:
 	/** Default constructor
 	  */
-	centerOfMass() : Ncol(-1), Nrow(-1), Npts(0), NnotDetected(0), totalMass(0), t0(std::numeric_limits<double>::max()), tSum(0), lambdaSum(0),
+	centerOfMass() : Ncol(1), Nrow(1), Npts(0), NnotDetected(0), totalMass(0), t0(std::numeric_limits<double>::max()), tSum(0), lambdaSum(0),
 	                 activeWidth(0), activeHeight(0), pixelWidth(0), pixelHeight(0), center(0, 0, 0), response() { }
 
 	/** Destructor

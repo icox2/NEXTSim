@@ -13,6 +13,7 @@
 #include "nDetSteppingAction.hh"
 #include "nDetParticleSource.hh"
 #include "nDetMasterOutputFile.hh"
+#include "nDetDetector.hh"
 #include "termColors.hh"
 
 const double KINETIC_ENERGY_THRESHOLD = 0.03; // MeV
@@ -452,8 +453,11 @@ bool nDetRunAction::processImplant(nDetImplant* imp){
 	double targetTimeOffset = source->GetTargetTimeOffset();
 	bool Ftrigger = false;
 	// Get pointers to the CoM calculators
+	params = detector->GetDetectorParameters();
 	centerOfMass *cmI = imp->getCenterOfMass();
-
+	cmI->setSegmentedPmt(&params);
+	cmI->loadGainMatrix("distortionTest1.dat");
+	
 	debugData.nPhotons[0] += cmI->getNumDetected();
 	
 	// Compute the total number of detected photons
@@ -474,7 +478,7 @@ bool nDetRunAction::processImplant(nDetImplant* imp){
 	G4ThreeVector centerI = cmI->getCenter();
 	debugData.photonDetComX[0] = centerI.getX(); 
 	debugData.photonDetComY[0] = centerI.getY();
-	//debugData.photonDetComZ[0] = centerL.getZ(); debugData.photonDetComZ[1] = centerR.getZ(); 
+	//debugData.photonDetComZ[0] = centerI.getZ();
 
 	// Get photon arrival times at the PMTs
 	debugData.photonMinTime[0] = cmI->getMinArrivalTime();
@@ -535,25 +539,24 @@ bool nDetRunAction::processImplant(nDetImplant* imp){
 	}
 	
 	// Get the digitizer response of the anodes.
-	/*pmtResponse *anodeResponseL = cmL->getAnodeResponse();
-	pmtResponse *anodeResponseR = cmR->getAnodeResponse();
+	pmtResponse *anodeResponseI = cmI->getAnodeResponse();
 
 	// Digitize anode waveforms and integrate.
-	float anodeQDC[2][4];
+	double anodeQDC[4]={0};
 	for(size_t i = 0; i < 4; i++){
-		anodeResponseL[i].digitize();
-		anodeResponseR[i].digitize();
-		debugData.anodeQDC[0][i] = anodeResponseL[i].integratePulseFromMaximum();
-		debugData.anodeQDC[1][i] = anodeResponseR[i].integratePulseFromMaximum();
+		anodeResponseI[i].digitize();
+		debugData.anodeQDC[0][i] = anodeResponseI[i].integratePulseFromMaximum();
+		anodeQDC[i] = debugData.anodeQDC[0][i];
 	}	
 	
 	// Compute the anode positions.
-	for(size_t i = 0; i < 2; i++){
-		debugData.reconDetComX[i] = -((anodeQDC[i][0]+anodeQDC[i][1])-(anodeQDC[i][2]+anodeQDC[i][3]))/(anodeQDC[i][0]+anodeQDC[i][1]+anodeQDC[i][2]+anodeQDC[i][3]);
-		debugData.reconDetComY[i] = ((anodeQDC[i][1]+anodeQDC[i][2])-(anodeQDC[i][3]+anodeQDC[i][0]))/(anodeQDC[i][0]+anodeQDC[i][1]+anodeQDC[i][2]+anodeQDC[i][3]);
-	}
-	outImplantData.reconComX = (debugData.reconDetComX[0] + debugData.reconDetComX[1]) / 2;
-	outImplantData.reconComY = (debugData.reconDetComY[0] + debugData.reconDetComY[1]) / 2;*/
+	//debugData.reconDetComX[0] = -((anodeQDC[0]+anodeQDC[1])-(anodeQDC[2]+anodeQDC[3]))/(anodeQDC[0]+anodeQDC[1]+anodeQDC[2]+anodeQDC[3]);
+	//debugData.reconDetComY[0] = ((anodeQDC[1]+anodeQDC[2])-(anodeQDC[3]+anodeQDC[0]))/(anodeQDC[0]+anodeQDC[1]+anodeQDC[2]+anodeQDC[3]);
+	debugData.reconDetComX[0] = cmI->getReconstructedX();
+	debugData.reconDetComY[0] = cmI->getReconstructedY();
+	//std::cout<<"recon "<<debugData.reconDetComX[0]<<std::endl;
+	outImplantData.reconComX = debugData.reconDetComX[0];
+	outImplantData.reconComY = debugData.reconDetComY[0];
 	
 	if(outputDebug || outputMultiDebug){
 		// Perform CFD on digitized anode waveforms.
@@ -593,12 +596,12 @@ bool nDetRunAction::processImplant(nDetImplant* imp){
 	// Compute "bar" variables.
 	double offset = distribution(generator);
 	outImplantData.barTOF = (debugData.pulsePhase[0]+debugData.pulsePhase[1])/2-offset;
-	outImplantData.barQDC = std::sqrt(debugData.pulseQDC[0]*debugData.pulseQDC[1]);
-	outImplantData.barMaxADC = std::sqrt(abs(debugData.pulseMax[0])*abs(debugData.pulseMax[1]));
+	outImplantData.barQDC = (debugData.pulseQDC[0]);
+	outImplantData.barMaxADC = (abs(debugData.pulseMax[0]));
 	outImplantData.barTrig = Ftrigger;
 	outImplantData.photonTOF = (debugData.photonAvgTime[0]+debugData.photonAvgTime[1])/2.0-offset;
-	outImplantData.photonComX = (debugData.photonDetComX[0] + debugData.photonDetComX[1]) / 2;
-	outImplantData.photonComY = (debugData.photonDetComY[0] + debugData.photonDetComY[1]) / 2;
+	outImplantData.photonComX = (debugData.photonDetComX[0]);
+	outImplantData.photonComY = (debugData.photonDetComY[0]);
 	// Get the segment of the detector where the photon CoM occurs.
 	cmI->getCenterSegment(debugData.centerOfMassColumn[0], debugData.centerOfMassRow[0]);	
 
@@ -679,7 +682,7 @@ void nDetRunAction::process(){
 			}
 			
 			// Push data onto the output branch for multiple detectors
-			if(userDetectors.size() > 1)
+			if(userDetectors.size() > 1 || userImplants.size()>1)
 				multData.Append(outData, detID++);
 		}
 	}
@@ -785,8 +788,9 @@ bool nDetRunAction::AddDetectedPhoton(const G4Step *step, const double &mass/*=1
 			return true;
 	}
 	else if(isImplant){
-		if(hitDetPmtI->addPoint(energy, time, position, mass))
+		if(hitDetPmtI->addPoint(energy, time, position, mass)){
 			return true;
+		}
 	}
 	else{
 		if(hitDetPmtR->addPoint(energy, time, position, mass))

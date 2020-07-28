@@ -65,6 +65,10 @@ void nDetParticleSourceMessenger::addAllCommands(){
 
 	addCommand(new G4UIcmdWithAString("/nDet/source/setGaussianEnergy", this));
 	addGuidance("Set the current energy level to a gaussian distribution and set the energy and sigma. SYNTAX: setGaussianEnergy <E(MeV)> <dE(MeV)>");
+	
+	addCommand(new G4UIcmdWithAString("/nDet/source/ion", this)); // type of source (252Cf, 137Cs, etc)
+	addGuidance("Set a pre-defined isotropic ion particle source");
+	addGuidance("100Sn for Tin-100 beam for implantation");
 }
 
 void nDetParticleSourceMessenger::SetNewChildValue(G4UIcommand* command, G4String newValue){ 
@@ -118,6 +122,9 @@ void nDetParticleSourceMessenger::SetNewChildValue(G4UIcommand* command, G4Strin
 	}
 	else if(index == 15){
 		fAction->SetBeamEnergySigma(newValue);
+	}
+	else if(index==16){
+		//fAction->
 	}
 }
 

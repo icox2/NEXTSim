@@ -21,6 +21,7 @@ class nDetTrackingAction;
 class nDetSteppingAction;
 class nDetConstruction;
 class pmtResponse;
+class nDetDetectorParams;
 
 class photonCounter;
 class nDetParticleSource;
@@ -264,6 +265,7 @@ class nDetRunAction : public G4UserRunAction
 	
 	nDetConstruction *detector; ///< Pointer to the global detector singleton
 	nDetParticleSource *source; ///< Pointer to the thread-local particle source
+	nDetDetectorParams params; ///< not a Pointer to the parameters of the detector
 	
 	std::vector<primaryTrackInfo> primaryTracks; ///< Vector of primary particle scatter events
 	

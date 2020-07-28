@@ -18,9 +18,9 @@
 
 # Mylar and optical grease thickness.
 /nDet/implant/setMylarThickness 0.025
-/nDet/implant/setGreaseThickness 0.1
+/nDet/implant/setGreaseThickness 1.0
 
-# Light diffuser.
+# Light 
 /nDet/implant/setDiffuserLength 1.5
 
 # Choose Scintillator
@@ -35,9 +35,10 @@
 ##################
 
 # NEXT 2x2x10 in^3
-/nDet/implant/setDetectorLength 5.0
+/nDet/implant/setDetectorLength 1.5
 /nDet/implant/setDetectorWidth 5.08
 /nDet/implant/setDetectorThickness 50.8
+/nDet/implant/setWindowThickness 1.
 /nDet/implant/setNumColumns 20
 /nDet/implant/setNumRows 20
 /nDet/implant/setStart 1
@@ -52,20 +53,25 @@
 # Set the wrapping.
 /nDet/implant/setWrapping mylar
 
+# Load PSPMT gain matrix 
+# NOTE: This MUST be done AFTER calling '/nDet/implant/update' otherwise it will fail
+#/nDet/implant/setGainMatrix ~/opt/NEXTSim/gain/hamamatsuH12700A_LA0967.dat
+/nDet/implant/setGainMatrix distortionTest1.dat
+
+# Load PSPMT spectral response function
+/nDet/implant/setSpectralResponse ~/opt/NEXTSim/spectral/hamamatsuH12700A.root
+
 # Set the position and rotation of the detector in the lab frame.
 /nDet/implant/setCylindrical 100 0 0
 /nDet/implant/setRotation 0 270 0
 /nDet/implant/addGeometry module
 
+/nDet/implant/addDiffuserLayer 50 50 0.1
+#/nDet/implant/addLightGuide 50 50 50 50 5 
+
 # Update the detector.
 /nDet/implant/update
 
-# Load PSPMT gain matrix 
-# NOTE: This MUST be done AFTER calling '/nDet/implant/update' otherwise it will fail
-/nDet/implant/setGainMatrix gains/distortionTest.dat
-
-# Load PSPMT spectral response function
-/nDet/implant/setSpectralResponse spectral/hamamatsuH12700A.root
 
 ################
 # OUTPUT SETUP #
@@ -106,7 +112,7 @@
 # Available source types: 137Cs 60Co 133Ba 241Am 90Sr 252Cf
 #/nDet/source/type 252Cf
 
-/nDet/source/type gamma 1.0
+/nDet/source/type 137Cs
 #/nDet/source/beam gamma 0.25
 #/nDet/source/beam 137Cs
 #/nDet/source/beam gamma 0.03
@@ -128,4 +134,4 @@
 # RUN CONTROL #
 ###############
 
-/run/beamOn 1000
+/run/beamOn 1000000

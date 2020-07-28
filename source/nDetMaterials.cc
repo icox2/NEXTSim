@@ -759,7 +759,7 @@ void nDetMaterials::defineScintillators(){
 
     fYSOMPT = new G4MaterialPropertiesTable();
     fYSOMPT->AddProperty("RINDEX", photonEnergy_YSO_2, RefIndex_YSO, 2);
-    fYSOMPT->AddProperty("ABSLENGTH", photonEnergy_YSO_2, Absorption_EJ200, 2);
+    fYSOMPT->AddProperty("ABSLENGTH", photonEnergy_YSO_2, Absorption_YSO, 2);
     fYSOMPT->AddProperty("FASTCOMPONENT", photonEnergy_YSO, ScintilFast_YSO, 13);
 
     fYSOMPT->AddConstProperty("SCINTILLATIONYIELD", 24000/MeV); // Photon yield as found in paper above for 137Cs
